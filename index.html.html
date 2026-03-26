@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Beam Cut Optimizer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; padding: 24px; }
+  h1 { font-size: 1.6rem; font-weight: 600; color: #fff; margin-bottom: 4px; }
+  .subtitle { color: #888; font-size: 0.85rem; margin-bottom: 24px; }
+
+  .card { background: #16213e; border: 1px solid #2a2a4a; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+  .card h2 { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.08em; color: #888; margin-bottom: 14px; }
+
+  label { font-size: 0.85rem; color: #aaa; display: block; margin-bottom: 4px; }
+  input[type=number] { background: #0f0f23; border: 1px solid #3a3a5c; border-radius: 6px; color: #fff; font-size: 0.95rem; padding: 8px 12px; width: 100%; outline: none; transition: border-color 0.2s; }
+  input[type=number]:focus { border-color: #5b8dee; }
+  input[type=number]::placeholder { color: #555; }
+
+  .row { display: flex; gap: 10px; align-items: flex-end; }
+  .row > .field { flex: 1; }
+  .row > .field-sm { width: 100px; flex-shrink: 0; }
+
+  .btn { border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 500; padding: 9px 16px; transition: background 0.15s, transform 0.1s; }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: #5b8dee; color: #fff; }
+  .btn-primary:hover { background: #4a7de0; }
+  .btn-danger { background: transparent; border: 1px solid #c0392b; color: #e74c3c; padding: 7px 12px; font-size: 0.82rem; }
+  .btn-danger:hover { background: #c0392b22; }
+  .btn-add { background: #1e3a5f; color: #5b8dee; border: 1px dashed #3a5a8a; width: 100%; margin-top: 10px; padding: 9px; }
+  .btn-add:hover { background: #243f6a; }
+  .btn-calc { background: #27ae60; color: #fff; font-size: 1rem; padding: 12px 28px; width: 100%; margin-top: 4px; }
+  .btn-calc:hover { background: #219a52; }
+
+  .length-list { display: flex; flex-direction: column; gap: 8px; }
+  .length-row { display: flex; gap: 8px; align-items: center; background: #0f0f23; border: 1px solid #2a2a4a; border-radius: 6px; padding: 8px 10px; }
+  .length-row span { font-size: 0.85rem; color: #aaa; flex: 1; }
+  .length-row .tag { background: #1e3a5f; color: #7aafff; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 500; }
+
+  .results { display: none; }
+  .results.show { display: block; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .stat { background: #0f0f23; border: 1px solid #2a2a4a; border-radius: 8px; padding: 14px; text-align: center; }
+  .stat .val { font-size: 1.5rem; font-weight: 700; color: #5b8dee; }
+  .stat .lbl { font-size: 0.75rem; color: #888; margin-top: 2px; }
+
+  .beam-grid { display: flex; flex-direction: column; gap: 10px; }
+  .beam-item { background: #0f0f23; border: 1px solid #2a2a4a; border-radius: 8px; padding: 12px 14px; }
+  .beam-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .beam-header span { font-size: 0.82rem; color: #888; }
+  .beam-header .beam-num { font-weight: 600; color: #e0e0e0; font-size: 0.9rem; }
+  .bar-container { width: 100%; height: 28px; border-radius: 4px; overflow: hidden; display: flex; background: #1a1a1a; border: 1px solid #2a2a4a; }
+  .bar-seg { height: 100%; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 600; overflow: hidden; position: relative; transition: opacity 0.2s; min-width: 2px; }
+  .bar-seg:hover { opacity: 0.85; }
+  .bar-waste { background: #2a2a3a; color: #555; }
+  .bar-seg .seg-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; }
+  .cuts { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .cut-tag { background: #1e3a5f; color: #7aafff; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; }
+  .waste-tag { background: #3a1a1a; color: #e74c3c; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; }
+
+  .error { background: #3a1a1a; border: 1px solid #c0392b; border-radius: 8px; padding: 12px 16px; color: #e74c3c; font-size: 0.88rem; display: none; margin-top: 12px; }
+  .error.show { display: block; }
+
+  .unit { color: #888; font-size: 0.8rem; margin-left: 4px; }
+
+  @media (max-width: 500px) { body { padding: 12px; } .stats { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+
+<h1>Beam Cut Optimizer</h1>
+<p class="subtitle">Column Generation optimizer — provably near-optimal cutting plans</p>
+
+<!-- Standard Length -->
+<div class="card">
+  <h2>Standard Beam Length</h2>
+  <div class="row">
+    <div class="field">
+      <label>Length per beam</label>
+      <input type="number" id="stdLength" value="6000" min="1" placeholder="e.g. 6000">
+    </div>
+    <div class="field-sm">
+      <label>Unit</label>
+      <input type="text" id="unit" value="mm" style="background:#0f0f23;border:1px solid #3a3a5c;border-radius:6px;color:#fff;font-size:0.95rem;padding:8px 12px;width:100%;outline:none;">
+    </div>
+  </div>
+</div>
+
+<!-- Kerf -->
+<div class="card">
+  <h2>Saw Kerf (optional)</h2>
+  <div class="row">
+    <div class="field">
+      <label>Blade kerf loss per cut</label>
+      <input type="number" id="kerf" value="3" min="0" placeholder="e.g. 3">
+    </div>
+  </div>
+</div>
+
+<!-- Required Lengths -->
+<div class="card">
+  <h2>Required Lengths</h2>
+  <div class="row" style="margin-bottom:10px;">
+    <div class="field">
+      <label>Length</label>
+      <input type="number" id="newLength" min="1" placeholder="e.g. 1200">
+    </div>
+    <div class="field-sm">
+      <label>Qty</label>
+      <input type="number" id="newQty" value="1" min="1" max="999" placeholder="1">
+    </div>
+    <div style="padding-bottom:1px;">
+      <button class="btn btn-primary" onclick="addLength()">Add</button>
+    </div>
+  </div>
+  <div class="length-list" id="lengthList"></div>
+  <button class="btn btn-add" onclick="addLength()">+ Add another length</button>
+</div>
+
+<button class="btn btn-calc" onclick="calculate()">Calculate Cutting Plan</button>
+<div class="error" id="errorBox"></div>
+
+<!-- Results -->
+<div class="results" id="results">
+  <div class="card" style="margin-top:16px;">
+    <h2>Summary</h2>
+    <div class="stats" id="statsBox"></div>
+  </div>
+  <div class="card">
+    <h2>Cutting Plan</h2>
+    <div class="beam-grid" id="beamGrid"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+let lengths = [];
+const COLORS = [
+  '#5b8dee','#27ae60','#e67e22','#9b59b6','#e74c3c',
+  '#1abc9c','#f39c12','#2980b9','#8e44ad','#16a085',
+  '#d35400','#2ecc71','#e91e63','#00bcd4','#ff9800',
+  '#673ab7','#4caf50','#f44336','#3f51b5','#009688'
+];
+
+function colorFor(val) {
+  const idx = Math.abs(Math.round(val * 7 + val / 13)) % COLORS.length;
+  return COLORS[idx];
+}
+
+function addLength() {
+  const lenInput = document.getElementById('newLength');
+  const qtyInput = document.getElementById('newQty');
+  const len = parseFloat(lenInput.value);
+  const qty = parseInt(qtyInput.value) || 1;
+  if (!len || len <= 0) { lenInput.focus(); return; }
+  lengths.push({ len, qty, id: Date.now() + Math.random() });
+  lenInput.value = '';
+  qtyInput.value = '1';
+  lenInput.focus();
+  renderList();
+}
+
+function removeLength(id) {
+  lengths = lengths.filter(l => l.id !== id);
+  renderList();
+}
+
+function renderList() {
+  const el = document.getElementById('lengthList');
+  if (lengths.length === 0) { el.innerHTML = '<div style="color:#555;font-size:0.85rem;padding:8px 0;">No lengths added yet.</div>'; return; }
+  el.innerHTML = lengths.map(l => `
+    <div class="length-row">
+      <div style="width:12px;height:12px;border-radius:3px;background:${colorFor(l.len)};flex-shrink:0;"></div>
+      <span><strong style="color:#e0e0e0;">${l.len}</strong> <span class="unit">${getUnit()}</span></span>
+      <span class="tag">× ${l.qty}</span>
+      <button class="btn btn-danger" onclick="removeLength(${l.id})">✕</button>
+    </div>
+  `).join('');
+}
+
+function getUnit() { return document.getElementById('unit').value || 'mm'; }
+
+function showError(msg) {
+  const el = document.getElementById('errorBox');
+  el.textContent = msg;
+  el.classList.add('show');
+  document.getElementById('results').classList.remove('show');
+}
+
+function hideError() { document.getElementById('errorBox').classList.remove('show'); }
+
+// ─────────────────────────────────────────────────────────────────
+//  TWO-PHASE SIMPLEX LP SOLVER
+//  Solves:  min  c^T x   s.t.  A x >= b,  x >= 0
+//  A : m×n,  b : m-vector,  c : n-vector
+//  Returns { feasible, x, duals }
+//  duals[i] = shadow price of constraint i  (used as knapsack profits)
+// ─────────────────────────────────────────────────────────────────
+function solveLP(A, b, c) {
+  const m = b.length, n = c.length;
+  // Layout: [x(n) | surplus s(m) | artificial r(m)]
+  const nT = n + 2 * m;
+
+  // Build constraint tableau rows
+  const tab = [];
+  for (let i = 0; i < m; i++) {
+    const row = new Float64Array(nT + 1);
+    for (let j = 0; j < n; j++) row[j] = A[i][j];
+    row[n + i]     = -1; // -s_i
+    row[n + m + i] =  1; // +r_i  (artificial)
+    row[nT]        = b[i];
+    tab.push(row);
+  }
+
+  // ── Phase 1: min Σ r_i ──
+  const ph1 = new Float64Array(nT + 1);
+  for (let i = 0; i < m; i++) ph1[n + m + i] = 1;
+  // Eliminate initial basic artificials from objective
+  for (let i = 0; i < m; i++)
+    for (let j = 0; j <= nT; j++) ph1[j] -= tab[i][j];
+  tab.push(ph1);
+
+  const basis = Array.from({ length: m }, (_, i) => n + m + i);
+  simplexRun(tab, basis, m, nT, nT); // all vars may enter
+
+  if (tab[m][nT] < -1e-6) return { feasible: false }; // infeasible
+
+  // Pivot out any degenerate artificials still in basis
+  for (let i = 0; i < m; i++) {
+    if (basis[i] < n + m) continue;
+    for (let j = 0; j < n + m; j++) {
+      if (Math.abs(tab[i][j]) > 1e-9) { pivot(tab, i, j, m); basis[i] = j; break; }
+    }
+  }
+
+  // ── Phase 2: min c^T x ──
+  const ph2 = new Float64Array(nT + 1);
+  for (let j = 0; j < n; j++) ph2[j] = c[j];
+  // Re-express objective in non-basic terms
+  for (let i = 0; i < m; i++) {
+    const bv = basis[i];
+    if (bv < nT && Math.abs(ph2[bv]) > 1e-12) {
+      const f = ph2[bv];
+      for (let j = 0; j <= nT; j++) ph2[j] -= f * tab[i][j];
+    }
+  }
+  tab[m] = ph2;
+  simplexRun(tab, basis, m, nT, n + m); // artificials may NOT re-enter
+
+  // Extract primal
+  const x = new Array(n).fill(0);
+  for (let i = 0; i < m; i++)
+    if (basis[i] < n) x[basis[i]] = Math.max(0, tab[i][nT]);
+
+  // Dual variables: y_i = reduced cost of surplus s_i = tab[m][n+i]
+  // (surplus has coeff −1 in row i → reduced cost = 0 − y^T(−e_i) = y_i)
+  const duals = Array.from({ length: m }, (_, i) => tab[m][n + i]);
+
+  return { feasible: true, x, duals };
+}
+
+function simplexRun(tab, basis, m, nT, maxEnter) {
+  const MAX = 200000;
+  for (let it = 0; it < MAX; it++) {
+    // Bland's rule: first eligible negative reduced cost
+    let pc = -1;
+    for (let j = 0; j < maxEnter; j++) {
+      if (tab[m][j] < -1e-9) { pc = j; break; }
+    }
+    if (pc < 0) break;
+
+    // Min-ratio with Bland's tie-break
+    let pr = -1; let minR = Infinity;
+    for (let i = 0; i < m; i++) {
+      if (tab[i][pc] > 1e-9) {
+        const r = tab[i][nT] / tab[i][pc];
+        if (r < minR - 1e-10 ||
+            (Math.abs(r - minR) < 1e-10 && pr >= 0 && basis[i] < basis[pr])) {
+          minR = r; pr = i;
+        }
+      }
+    }
+    if (pr < 0) break; // unbounded
+    basis[pr] = pc;
+    pivot(tab, pr, pc, m);
+  }
+}
+
+function pivot(tab, pr, pc, m) {
+  const W = tab[0].length;
+  const pv = tab[pr][pc];
+  for (let j = 0; j < W; j++) tab[pr][j] /= pv;
+  for (let i = 0; i <= m; i++) {
+    if (i === pr) continue;
+    const f = tab[i][pc];
+    if (Math.abs(f) < 1e-14) continue;
+    for (let j = 0; j < W; j++) tab[i][j] -= f * tab[pr][j];
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  UNBOUNDED INTEGER KNAPSACK  (pricing sub-problem)
+//  Maximize  Σ values[i] · y[i]
+//  s.t.      Σ weights[i] · y[i]  ≤  capacity,   y[i] ≥ 0 integer
+// ─────────────────────────────────────────────────────────────────
+function solveKnapsack(weights, values, capacity) {
+  const m = weights.length;
+  const C = Math.round(capacity);
+  const dp   = new Float64Array(C + 1);
+  const from = new Int32Array(C + 1).fill(-1);
+
+  for (let c = 1; c <= C; c++) {
+    for (let i = 0; i < m; i++) {
+      if (values[i] <= 1e-10) continue;
+      const w = Math.round(weights[i]);
+      if (w <= 0 || c < w) continue;
+      const v = dp[c - w] + values[i];
+      if (v > dp[c] + 1e-10) { dp[c] = v; from[c] = i; }
+    }
+  }
+
+  const pattern = new Array(m).fill(0);
+  for (let c = C; c > 0 && from[c] >= 0;) {
+    const i = from[c]; pattern[i]++; c -= Math.round(weights[i]);
+  }
+  return { value: dp[C], pattern };
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  COLUMN GENERATION
+//  1. Start with trivial patterns (one length per beam, packed tight).
+//  2. Solve master LP relaxation → get dual variables π.
+//  3. Pricing: knapsack with profits π → new pattern p*.
+//     Reduced cost = 1 − π·p*.  If < 0 → add column and repeat.
+//  4. Round LP solution to integers; greedily reduce surplus beams.
+// ─────────────────────────────────────────────────────────────────
+function columnGeneration(items, beamLength, kerf) {
+  // Scale all values to integers to avoid float rounding in DP
+  const allVals = items.map(l => l.len).concat(beamLength, kerf > 0 ? kerf : []);
+  let maxDec = 0;
+  for (const v of allVals) {
+    const s = v.toString(), d = s.indexOf('.');
+    if (d >= 0) maxDec = Math.max(maxDec, s.length - d - 1);
+  }
+  const SC = Math.pow(10, Math.min(maxDec, 4));
+  const sBeam = Math.round(beamLength * SC);
+  const sKerf = Math.round(kerf * SC);
+
+  // Group by length → distinct lengths + demands
+  const grouped = {};
+  for (const item of items) {
+    const key = Math.round(item.len * SC);
+    grouped[key] = (grouped[key] || 0) + item.qty;
+  }
+  const scaledLens = Object.keys(grouped).map(Number).sort((a, b) => b - a);
+  const demands    = scaledLens.map(l => grouped[l]);
+  const m          = scaledLens.length;
+
+  // Effective weights & capacity for knapsack
+  // n pieces in one beam:  Σl + (n−1)·kerf ≤ L  →  Σ(l+kerf) ≤ L+kerf
+  const effW   = scaledLens.map(l => l + sKerf);
+  const effCap = sBeam + sKerf;
+
+  // Initial patterns: fill beam with max copies of each distinct length
+  let patterns = [];
+  for (let i = 0; i < m; i++) {
+    const pat = new Array(m).fill(0);
+    pat[i] = Math.max(1, Math.floor(effCap / effW[i]));
+    patterns.push(pat);
+  }
+  patterns = dedup(patterns);
+
+  // CG loop
+  const MAX_CG = 600;
+  let cgIter = 0;
+  for (; cgIter < MAX_CG; cgIter++) {
+    const A = buildA(patterns, m);
+    const lp = solveLP(A, demands, new Array(patterns.length).fill(1));
+    if (!lp.feasible) break;
+
+    const { value, pattern } = solveKnapsack(effW, lp.duals, effCap);
+    if (value <= 1 + 1e-6) break; // LP optimal — no improving column
+    if (patterns.some(p => p.every((v, i) => v === pattern[i]))) break; // duplicate
+    patterns.push(pattern);
+  }
+
+  // Final LP for integer rounding base
+  const Af  = buildA(patterns, m);
+  const lpf = solveLP(Af, demands, new Array(patterns.length).fill(1));
+  const xLP = lpf.feasible ? lpf.x : new Array(patterns.length).fill(0);
+  const lpLB = xLP.reduce((s, v) => s + v, 0);
+
+  // Round up
+  let x = xLP.map(v => Math.ceil(v - 1e-6));
+
+  // Covered counts
+  const cov = new Array(m).fill(0);
+  for (let j = 0; j < patterns.length; j++)
+    for (let i = 0; i < m; i++) cov[i] += x[j] * patterns[j][i];
+
+  // Greedy reduction: remove beam copies that are no longer needed
+  let improved = true;
+  while (improved) {
+    improved = false;
+    for (let j = 0; j < patterns.length; j++) {
+      if (x[j] <= 0) continue;
+      if (demands.every((d, i) => cov[i] - patterns[j][i] >= d)) {
+        x[j]--;
+        for (let i = 0; i < m; i++) cov[i] -= patterns[j][i];
+        improved = true;
+      }
+    }
+  }
+
+  // Build display beam list
+  const displayLens = scaledLens.map(l => l / SC); // back to original units
+  const beams = [];
+  for (let j = 0; j < patterns.length; j++) {
+    if (x[j] <= 0) continue;
+    const cuts = [];
+    for (let i = 0; i < m; i++)
+      for (let k = 0; k < patterns[j][i]; k++) cuts.push(displayLens[i]);
+    cuts.sort((a, b) => b - a);
+    const used  = cuts.reduce((s, l) => s + l, 0) + Math.max(0, cuts.length - 1) * kerf;
+    const waste = beamLength - used;
+    for (let r = 0; r < x[j]; r++) beams.push({ cuts: [...cuts], waste });
+  }
+
+  return { beams, lpLB, cgIter, patternCount: patterns.filter((_, j) => x[j] > 0).length };
+}
+
+function buildA(patterns, m) {
+  const A = [];
+  for (let i = 0; i < m; i++) A.push(patterns.map(p => p[i]));
+  return A;
+}
+
+function dedup(patterns) {
+  const seen = new Set();
+  return patterns.filter(p => {
+    const k = p.join(',');
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  UI
+// ─────────────────────────────────────────────────────────────────
+function calculate() {
+  hideError();
+  const stdLen = parseFloat(document.getElementById('stdLength').value);
+  const kerf   = parseFloat(document.getElementById('kerf').value) || 0;
+  const unit   = getUnit();
+
+  if (!stdLen || stdLen <= 0) { showError('Please enter a valid standard beam length.'); return; }
+  if (lengths.length === 0)   { showError('Please add at least one required length.');   return; }
+
+  for (const l of lengths) {
+    if (l.len > stdLen) {
+      showError(`Length ${l.len} ${unit} exceeds the standard beam length of ${stdLen} ${unit}.`);
+      return;
+    }
+  }
+
+  let result;
+  try {
+    result = columnGeneration(lengths, stdLen, kerf);
+  } catch (e) {
+    showError('Solver error: ' + e.message);
+    return;
+  }
+
+  const totalPieces = lengths.reduce((s, l) => s + l.qty, 0);
+  renderResults(result.beams, stdLen, kerf, unit, totalPieces, result.lpLB, result.cgIter);
+}
+
+function renderResults(bins, stdLen, kerf, unit, totalPieces, lpLB, cgIter) {
+  const totalBeams  = bins.length;
+  const totalWaste  = bins.reduce((s, b) => s + b.waste, 0);
+  const totalMat    = totalBeams * stdLen;
+  const efficiency  = ((totalMat - totalWaste) / totalMat * 100).toFixed(1);
+  const gap         = totalBeams > 0 ? (((totalBeams - lpLB) / totalBeams) * 100).toFixed(1) : '0.0';
+
+  document.getElementById('statsBox').innerHTML = `
+    <div class="stat"><div class="val">${totalBeams}</div><div class="lbl">Beams needed</div></div>
+    <div class="stat"><div class="val">${totalPieces}</div><div class="lbl">Total pieces</div></div>
+    <div class="stat"><div class="val">${efficiency}%</div><div class="lbl">Material efficiency</div></div>
+    <div class="stat"><div class="val">${fmt(totalWaste)}</div><div class="lbl">Total waste (${unit})</div></div>
+    <div class="stat"><div class="val">${fmt(lpLB)}</div><div class="lbl">LP lower bound</div></div>
+    <div class="stat"><div class="val">${gap}%</div><div class="lbl">Optimality gap</div></div>
+  `;
+
+  const grid = document.getElementById('beamGrid');
+  grid.innerHTML = bins.map((bin, i) => {
+    const { cuts, waste } = bin;
+    let segments = cuts.map(len => {
+      const pct = (len / stdLen * 100).toFixed(3);
+      return `<div class="bar-seg" style="width:${pct}%;background:${colorFor(len)};color:#fff;" title="${len} ${unit}">
+        <span class="seg-label">${len}</span></div>`;
+    });
+
+    if (kerf > 0) {
+      const kpct = (kerf / stdLen * 100).toFixed(3);
+      const kerfs = cuts.slice(0, -1).map(() =>
+        `<div class="bar-seg" style="width:${kpct}%;background:#111;min-width:2px;" title="Kerf ${kerf} ${unit}"></div>`);
+      const merged = [];
+      segments.forEach((s, idx) => { merged.push(s); if (kerfs[idx]) merged.push(kerfs[idx]); });
+      segments = merged;
+    }
+
+    if (waste > 1e-9) {
+      const pct = (waste / stdLen * 100).toFixed(3);
+      segments.push(`<div class="bar-seg bar-waste" style="width:${pct}%;" title="Waste: ${fmt(waste)} ${unit}">
+        <span class="seg-label">${waste > stdLen * 0.04 ? fmt(waste) : ''}</span></div>`);
+    }
+
+    const cutLabels  = cuts.map(c => `<span class="cut-tag">${c} ${unit}</span>`).join('');
+    const wasteLabel = waste > 1e-9
+      ? `<span class="waste-tag">waste: ${fmt(waste)} ${unit}</span>`
+      : `<span class="cut-tag" style="background:#1a3a1a;color:#27ae60;">zero waste</span>`;
+
+    return `
+      <div class="beam-item">
+        <div class="beam-header">
+          <span class="beam-num">Beam ${i + 1}</span>
+          <span>${cuts.length} piece${cuts.length !== 1 ? 's' : ''} &nbsp;|&nbsp; waste: ${fmt(waste)} ${unit}</span>
+        </div>
+        <div class="bar-container">${segments.join('')}</div>
+        <div class="cuts" style="margin-top:8px;">${cutLabels} ${wasteLabel}</div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('results').classList.add('show');
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function fmt(n) { return Number.isInteger(n) ? n : parseFloat(n.toFixed(2)); }
+
+document.getElementById('newLength').addEventListener('keydown', e => { if (e.key === 'Enter') addLength(); });
+document.getElementById('newQty').addEventListener('keydown',    e => { if (e.key === 'Enter') addLength(); });
+
+// Select all text on focus so typing immediately replaces the value
+document.querySelectorAll('input[type=number]').forEach(el => {
+  el.addEventListener('focus', () => el.select());
+});
+
+renderList();
+</script>
+</body>
+</html>
