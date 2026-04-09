@@ -66,6 +66,35 @@
   .unit { color: #888; font-size: 0.8rem; margin-left: 4px; }
 
   @media (max-width: 500px) { body { padding: 12px; } .stats { grid-template-columns: repeat(2, 1fr); } }
+
+  .export-row { display: flex; gap: 8px; margin-top: 12px; }
+  .btn-export { background: #1e3a5f; color: #5b8dee; border: 1px solid #3a5a8a; border-radius: 6px; cursor: pointer; font-size: 0.88rem; font-weight: 500; padding: 9px 16px; transition: background 0.15s, transform 0.1s; }
+  .btn-export:hover { background: #243f6a; }
+  .btn-export:active { transform: scale(0.97); }
+
+  @media print {
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { background: #fff; color: #111; padding: 16px; font-family: 'Segoe UI', sans-serif; }
+    h1 { color: #111; font-size: 1.3rem; }
+    .subtitle { color: #666; }
+    .card { background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 14px; margin-bottom: 12px; break-inside: avoid; }
+    .card h2 { color: #444; }
+    .stat { background: #f5f5f5; border: 1px solid #ddd; }
+    .stat .val { color: #1a56db; }
+    .stat .lbl { color: #555; }
+    .beam-item { background: #fff; border: 1px solid #ccc; break-inside: avoid; }
+    .beam-header span { color: #555; }
+    .beam-header .beam-num { color: #111; }
+    .bar-container { border: 1px solid #ccc; background: #eee; }
+    .bar-waste { background: #e0e0e0 !important; color: #999 !important; }
+    .cut-tag { background: #dce8ff; color: #1a56db; }
+    .waste-tag { background: #ffe0e0; color: #c0392b; }
+    /* Hide everything except results */
+    body > h1, body > .subtitle, body > .card, body > .btn-calc, body > .error { display: none !important; }
+    .results { display: block !important; }
+    .results > .card:first-child { margin-top: 0; }
+    .export-row { display: none !important; }
+  }
 </style>
 </head>
 <body>
@@ -131,6 +160,10 @@
   <div class="card">
     <h2>Cutting Plan</h2>
     <div class="beam-grid" id="beamGrid"></div>
+  </div>
+  <div class="export-row">
+    <button class="btn btn-export" onclick="window.print()">&#128438; Print / Save PDF</button>
+    <button class="btn btn-export" onclick="exportCSV()">&#128196; Export CSV</button>
   </div>
 </div>
 
@@ -478,6 +511,7 @@ function calculate() {
 }
 
 function renderResults(bins, stdLen, kerf, unit, totalPieces, lpLB, cgIter) {
+  lastResult = { bins, stdLen, kerf, unit };
   const totalBeams  = bins.length;
   const totalWaste  = bins.reduce((s, b) => s + b.waste, 0);
   const totalMat    = totalBeams * stdLen;
@@ -538,6 +572,31 @@ function renderResults(bins, stdLen, kerf, unit, totalPieces, lpLB, cgIter) {
 }
 
 function fmt(n) { return Number.isInteger(n) ? n : parseFloat(n.toFixed(2)); }
+
+// ── Export helpers ──────────────────────────────────────────────────
+let lastResult = null; // stored by renderResults for export use
+
+function exportCSV() {
+  if (!lastResult) return;
+  const { bins, stdLen, kerf, unit } = lastResult;
+  const rows = [
+    ['Beam Cut Optimizer — Cutting Plan'],
+    ['Standard length', stdLen, unit, 'Kerf', kerf, unit],
+    [],
+    ['Beam #', 'Piece #', `Length (${unit})`, `Waste (${unit})`]
+  ];
+  bins.forEach((bin, bi) => {
+    bin.cuts.forEach((cut, ci) => {
+      rows.push([bi + 1, ci + 1, cut, ci === 0 ? fmt(bin.waste) : '']);
+    });
+  });
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'cutting-plan.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
 
 document.getElementById('newLength').addEventListener('keydown', e => { if (e.key === 'Enter') addLength(); });
 document.getElementById('newQty').addEventListener('keydown',    e => { if (e.key === 'Enter') addLength(); });
